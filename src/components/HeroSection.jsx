@@ -2,7 +2,7 @@ import React from "react";
 import Button from "./Button";
 
 const HeroSection = () => (
-  <section className="text-left px-6 py-18 max-w-4xl mb-20 mt-20">
+  <section className="text-left px-12 py-18 max-w-4xl mb-20 mt-20">
     <h1 className="text-7xl font-bold leading-tight">
       WELCOME TO <br />
       <span className="block">RR STONES PVT LTD.</span>

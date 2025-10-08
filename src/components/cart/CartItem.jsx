@@ -1,4 +1,4 @@
-import { useCart } from "../../context/CartContext";
+import { useCart } from "../../context/EnhancedCartContext";
 
 export default function CartItem({ item }) {
   const { updateQuantity, removeFromCart } = useCart();

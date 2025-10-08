@@ -1,4 +1,5 @@
-import { useCart } from "../context/CartContext";
+import { useCart } from "../context/EnhancedCartContext";
+import { useAuth } from "../context/AuthContext";
 import CartItem from "../components/cart/CartItem";
 import customers from "../data/customers.json";
 import { useState, useMemo } from "react";
@@ -9,8 +10,9 @@ const FILLER_CHARGE = 30;
 const SHIPPING_FEE = 120;
 const MAX_WEIGHT = 48000;
 
-export default function Cart({ user, onLogout }) {
+export default function Cart() {
   const { cartItems } = useCart();
+  const { user, logout } = useAuth();
   const [showConfirm, setShowConfirm] = useState(false);
   const [popupMessage, setPopupMessage] = useState("");
   const navigate = useNavigate();
@@ -87,7 +89,7 @@ export default function Cart({ user, onLogout }) {
   if (!user) {
     return (
       <div>
-        <Navbar user={user} onLogout={onLogout} />
+        <Navbar user={user} onLogout={logout} />
         <div className="max-w-6xl mx-auto px-4 py-8">
           <h1 className="text-2xl font-bold">Cart</h1>
           <p>Your cart is empty. Please log in to see your items.</p>
@@ -100,7 +102,7 @@ export default function Cart({ user, onLogout }) {
   if (!cartItems.length) {
     return (
       <div>
-        <Navbar user={user} onLogout={onLogout} />
+        <Navbar user={user} onLogout={logout} />
         <div className="max-w-6xl mx-auto px-4 py-8">
           <h1 className="text-2xl font-bold">Cart</h1>
           <p>Your cart is empty.</p>
@@ -112,7 +114,7 @@ export default function Cart({ user, onLogout }) {
   // ✅ Logged in + has items
   return (
     <div>
-      <Navbar user={user} onLogout={onLogout} />
+      <Navbar user={user} onLogout={logout} />
       <div className="max-w-6xl mx-auto px-4 py-8">
         <h1 className="text-2xl font-bold mb-4">Cart</h1>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

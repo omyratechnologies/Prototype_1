@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useCart } from "../../context/CartContext";
+import { useCart } from "../../context/EnhancedCartContext";
 
 export default function PurchaseOptions({ purchaseOptions, product }) {
   const { addToCart } = useCart();

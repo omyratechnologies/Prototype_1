@@ -1,47 +1,51 @@
-import { useState, useEffect } from "react"; 
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { AuthProvider } from "./context/AuthContext";
+import { CartProvider } from "./context/EnhancedCartContext";
+import ToastProvider from "./context/ToastContext";
+import OnlineStatusProvider from "./context/OnlineStatusContext";
+import ErrorBoundary from "./components/ErrorBoundary";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
 import ProductTypesPage from "./pages/ProductTypesPage";
-import ProductDetailPage from "./pages/ProductDetailPage";
+import EnhancedProductDetailPage from "./pages/EnhancedProductDetailPage";
 import VarietiesPage from "./pages/VarietiesPage";
-import Cart from "./pages/Cart";
-import CheckoutPage from "./pages/Checkout";
+import EnhancedCartPage from "./pages/EnhancedCartPage";
+import CheckoutPage from "./pages/CheckoutPage";
+import ProfilePage from "./pages/ProfilePage";
+import OrdersPage from "./pages/OrdersPage";
+import InvoicePage from "./pages/InvoicePage";
 import Invoice from "./pages/Invoice";
 
 function App() {
-  const [user, setUser] = useState(null);
-
-  useEffect(() => {
-    const stored = localStorage.getItem("loggedInUser");
-    if (stored) setUser(JSON.parse(stored));
-  }, []);
-
-  function handleLogin(userObj) {
-    setUser(userObj);
-    localStorage.setItem("loggedInUser", JSON.stringify(userObj));
-  }
-
-  function handleLogout() {
-    localStorage.removeItem("loggedInUser");
-    setUser(null);
-  }
 
   return (
-    <Router>
-      <Routes>
-        <Route path="/" element={<Home user={user} onLogout={handleLogout} />} />
-        <Route path="/login" element={<Login onLogin={handleLogin} />} />
+    <ErrorBoundary>
+      <ToastProvider>
+        <AuthProvider>
+          <OnlineStatusProvider>
+            <CartProvider>
+              <Router>
+                <Routes>
+                  <Route path="/" element={<Home />} />
+                  <Route path="/login" element={<Login />} />
+                  <Route path="/profile" element={<ProfilePage />} />
+                  <Route path="/orders" element={<OrdersPage />} />
+                  <Route path="/invoice" element={<InvoicePage />} />
 
-        <Route path="/products/:slug" element={<ProductTypesPage user={user} onLogout={handleLogout} />} />
-        <Route path="/products/:categoryId/:typeId" element={<VarietiesPage user={user} onLogout={handleLogout} />} />
-        <Route path="/products/:categoryId/:typeId/:varietyId" element={<ProductDetailPage user={user} onLogout={handleLogout} />} />
+                  <Route path="/products/:slug" element={<ProductTypesPage />} />
+                  <Route path="/products/:categoryId/:typeId" element={<VarietiesPage />} />
+                  <Route path="/products/:categoryId/:typeId/:varietyId" element={<EnhancedProductDetailPage />} />
 
-        <Route path="/checkout" element={<CheckoutPage user={user} onLogout={handleLogout} />} />
-        <Route path="/cart" element={<Cart user={user} onLogout={handleLogout} />} />
-        <Route path="/invoice" element={<Invoice user={user} onLogout={handleLogout} />} />
-      </Routes>
-    </Router>
+                  <Route path="/checkout" element={<CheckoutPage />} />
+                  <Route path="/cart" element={<EnhancedCartPage />} />
+                  <Route path="/legacy-invoice" element={<Invoice />} />
+                </Routes>
+              </Router>
+            </CartProvider>
+          </OnlineStatusProvider>
+        </AuthProvider>
+      </ToastProvider>
+    </ErrorBoundary>
   );
 }
 

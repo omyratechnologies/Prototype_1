@@ -1,42 +1,49 @@
 import { useState } from "react";
-import customers from "../data/customers.json";
 import { useNavigate, useLocation } from "react-router-dom";
 import { IoMdEyeOff, IoMdEye } from "react-icons/io";
+import { useAuth } from "../context/AuthContext";
 
-export default function Login({ onLogin }) {
-  const [form, setForm] = useState({ identifier: "", password: "" });
+export default function Login() {
+  const [form, setForm] = useState({ email: "", password: "" });
   const [showPwd, setShowPwd] = useState(false);
-  const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+  const { login, error, clearError } = useAuth();
 
-  // ✅ Correct way: get `pathname` if redirected from another page
+  // Get redirect path if user was redirected from another page
   const from = location.state?.from?.pathname || "/";
 
   function handleChange(e) {
     setForm({ ...form, [e.target.name]: e.target.value });
-    setError("");
+    // Clear any existing errors when user starts typing
+    if (error) {
+      clearError();
+    }
   }
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
-
-    const user = customers.find(
-      (u) =>
-        u.username === form.identifier ||
-        u.email === form.identifier ||
-        u.phone === form.identifier
-    );
-
-    if (user && user.password === form.password) {
-      onLogin(user);
-      console.log("✅ Login successful:", user);
-      console.log("➡️ Redirecting back to:", from);
-      navigate(from, { replace: true }); // 🔥 Go back to page before login
-    } else {
-      console.log("❌ Invalid credentials for:", form.identifier);
-      setError("Invalid credentials");
+    
+    if (!form.email || !form.password) {
+      return;
     }
+
+    setIsLoading(true);
+    
+    const result = await login({
+      email: form.email,
+      password: form.password,
+    });
+
+    setIsLoading(false);
+
+    if (result.success) {
+      console.log("✅ Login successful:", result.user);
+      console.log("➡️ Redirecting back to:", from);
+      navigate(from, { replace: true });
+    }
+    // Error is handled by the AuthContext and displayed via the error state
   }
 
   return (
@@ -61,13 +68,14 @@ export default function Login({ onLogin }) {
         <h1 className="text-black font-bold text-3xl mb-8 text-center">Login</h1>
 
         <input
-          type="text"
-          name="identifier"
-          value={form.identifier}
+          type="email"
+          name="email"
+          value={form.email}
           onChange={handleChange}
-          placeholder="Phone number, email address or username"
+          placeholder="Email address"
           className="w-full h-12 px-4 mb-4 rounded border border-black focus:border-black focus:outline-none transition placeholder:text-gray-400"
-          autoComplete="username"
+          autoComplete="email"
+          required
         />
 
         <div className="relative w-full mb-2">
@@ -79,6 +87,7 @@ export default function Login({ onLogin }) {
             placeholder="Password"
             className="w-full h-12 px-4 pr-10 rounded border border-black focus:border-black focus:outline-none transition placeholder:text-gray-400"
             autoComplete="current-password"
+            required
           />
           <span
             className="absolute right-3 top-[14px] cursor-pointer text-xl opacity-60"
@@ -100,12 +109,24 @@ export default function Login({ onLogin }) {
 
         <button
           type="submit"
-          className="w-full max-w-xs h-12 bg-black text-white font-medium rounded transition hover:bg-gray-800"
+          disabled={isLoading}
+          className="w-full max-w-xs h-12 bg-black text-white font-medium rounded transition hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Login
+          {isLoading ? "Signing in..." : "Login"}
         </button>
 
-        {error && <div className="text-red-500 text-xs mt-3">{error}</div>}
+        {error && (
+          <div className="text-red-500 text-xs mt-3 text-center max-w-xs">
+            {error}
+          </div>
+        )}
+
+        <div className="text-xs text-gray-400 text-center mt-6">
+          Don't have an account?{" "}
+          <a href="#" className="text-black font-semibold hover:underline">
+            Sign up
+          </a>
+        </div>
       </form>
     </div>
   );
