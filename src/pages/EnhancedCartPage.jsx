@@ -12,24 +12,36 @@ export default function EnhancedCartPage() {
     loading,
     error,
     businessCalculation,
-    shippingValidation,
     updateCartItem,
     removeFromCart,
     clearCart,
-    reserveForCheckout,
+    startCheckout,
+    completeCheckout,
+    cancelCheckout,
     hasItems,
     isReserved,
+    isReservationExpired,
     canModify,
     getTotalWeight,
     isShippingAvailable,
     isWeightLimitExceeded,
-    getWeightWarning
+    getWeightWarning,
+    notification,
+    clearNotification,
+    invoice,
+    reservationSecondsRemaining,
+    reservationMinutes
   } = useCart();
   
   const navigate = useNavigate();
   const [isClearing, setIsClearing] = useState(false);
   const [updatingItem, setUpdatingItem] = useState(null);
   const [showShippingModal, setShowShippingModal] = useState(false);
+  const [hasShownWeightAlert, setHasShownWeightAlert] = useState(false);
+  const [isStartingCheckout, setIsStartingCheckout] = useState(false);
+  const [isCancellingReservation, setIsCancellingReservation] = useState(false);
+
+  const isInitialLoading = loading && !cart;
 
   // Redirect to login if not authenticated
   useEffect(() => {
@@ -38,11 +50,40 @@ export default function EnhancedCartPage() {
     }
   }, [user, loading, navigate]);
 
+  useEffect(() => {
+    if (!cart) {
+      return;
+    }
+
+    const exceedsLimit = isWeightLimitExceeded();
+
+    if (exceedsLimit && !hasShownWeightAlert) {
+      const currentWeight = getTotalWeight();
+      const warningMessage = getWeightWarning() ||
+        `⚠️ Your cart weighs ${currentWeight.toLocaleString()} lbs, which exceeds the 48,000 lbs limit. Pickup will be required.`;
+
+      alert(warningMessage);
+      setHasShownWeightAlert(true);
+    } else if (!exceedsLimit && hasShownWeightAlert) {
+      setHasShownWeightAlert(false);
+    }
+  }, [cart, businessCalculation, isWeightLimitExceeded, getWeightWarning, getTotalWeight, hasShownWeightAlert]);
+
+  useEffect(() => {
+    if (!notification) return;
+
+    const timer = setTimeout(() => {
+      clearNotification();
+    }, 8000);
+
+    return () => clearTimeout(timer);
+  }, [notification, clearNotification]);
+
   if (!user) {
     return null; // Will redirect to login
   }
 
-  if (loading) {
+  if (isInitialLoading) {
     return (
       <div className="bg-white min-h-screen relative">
         <NavBar user={user} onLogout={logout} />
@@ -141,18 +182,45 @@ export default function EnhancedCartPage() {
   };
 
   const handleCheckout = async () => {
-    // Check if shipping is available for this weight
-    if (!isShippingAvailable() && !showShippingModal) {
+    if (!isReserved && !isShippingAvailable() && !showShippingModal) {
       setShowShippingModal(true);
       return;
     }
 
     try {
-      await reserveForCheckout(15); // Reserve for 15 minutes
-      navigate('/checkout');
+      setIsStartingCheckout(true);
+      if (!isReserved) {
+        await startCheckout();
+      }
+
+      const payload = await completeCheckout();
+      navigate('/checkout', {
+        state: {
+          autoOpenInvoice: true,
+          orderId: payload?.orderId || payload?.order?._id || null
+        }
+      });
     } catch (err) {
-      console.error('Error starting checkout:', err);
-      alert(err.message || 'Failed to start checkout');
+      console.error('Error processing checkout:', err);
+      alert(err.message || 'Failed to complete checkout. Please try again.');
+    } finally {
+      setIsStartingCheckout(false);
+    }
+  };
+
+  const handleCancelReservation = async () => {
+    if (!isReserved && !isReservationExpired) {
+      return;
+    }
+
+    try {
+      setIsCancellingReservation(true);
+      await cancelCheckout();
+    } catch (err) {
+      console.error('Error cancelling checkout:', err);
+      alert(err.message || 'Failed to cancel checkout');
+    } finally {
+      setIsCancellingReservation(false);
     }
   };
 
@@ -162,6 +230,62 @@ export default function EnhancedCartPage() {
 
   const formatCurrency = (amount) => {
     return '₹' + (amount || 0).toLocaleString();
+  };
+
+  const formatReservationCountdown = () => {
+    if (!isReserved || reservationSecondsRemaining <= 0) {
+      return '00:00';
+    }
+
+    const minutes = Math.floor(reservationSecondsRemaining / 60);
+    const seconds = reservationSecondsRemaining % 60;
+    return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  };
+
+  const formatDateTime = (value) => {
+    if (!value) return null;
+    try {
+      return new Intl.DateTimeFormat('en-IN', {
+        dateStyle: 'medium',
+        timeStyle: 'short'
+      }).format(new Date(value));
+    } catch (err) {
+      return value;
+    }
+  };
+
+  const notificationStyles = {
+    success: {
+      container: 'bg-green-50 border-green-200',
+      text: 'text-green-800',
+      button: 'text-green-700 hover:text-green-900'
+    },
+    info: {
+      container: 'bg-blue-50 border-blue-200',
+      text: 'text-blue-800',
+      button: 'text-blue-700 hover:text-blue-900'
+    },
+    warning: {
+      container: 'bg-yellow-50 border-yellow-200',
+      text: 'text-yellow-800',
+      button: 'text-yellow-700 hover:text-yellow-900'
+    },
+    error: {
+      container: 'bg-red-50 border-red-200',
+      text: 'text-red-800',
+      button: 'text-red-700 hover:text-red-900'
+    }
+  };
+
+  const notificationStyle = notification ? (notificationStyles[notification.type] || notificationStyles.info) : null;
+
+  const checkoutButtonLabel = () => {
+    if (isStartingCheckout) {
+      return isReserved ? 'Finalizing Order...' : 'Securing Inventory...';
+    }
+    if (isReserved) return 'Finalize & View Invoice';
+    if (loading) return 'Processing...';
+    return 'Lock Inventory & Generate Invoice';
   };
 
   return (
@@ -188,14 +312,62 @@ export default function EnhancedCartPage() {
           </div>
         </div>
 
+        {notification && notificationStyle && (
+          <div className={`mb-6 border rounded-lg p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3 ${notificationStyle.container}`}>
+            <p className={`text-sm leading-relaxed ${notificationStyle.text}`}>{notification.message}</p>
+            <button
+              onClick={clearNotification}
+              className={`text-xs font-medium ${notificationStyle.button}`}
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
         {/* Reservation Notice */}
         {isReserved && (
-          <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-lg mb-6">
-            <div className="flex items-center">
-              <div className="text-yellow-800">
-                <h3 className="font-medium">Cart Reserved for Checkout</h3>
-                <p className="text-sm">Your cart is reserved. Please complete your checkout or the reservation will expire.</p>
+          <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg mb-6">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+              <div className="text-blue-900">
+                <h3 className="font-semibold">Inventory Reserved</h3>
+                <p className="text-sm">
+                  Your items are locked in for checkout. Time remaining: <span className="font-medium">{formatReservationCountdown()}</span>
+                  {reservationMinutes ? ` of ${reservationMinutes} minutes` : ''}.
+                </p>
               </div>
+              <div className="flex flex-wrap gap-3">
+                <button
+                  onClick={() => navigate('/checkout')}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition"
+                >
+                  Continue to Checkout
+                </button>
+                <button
+                  onClick={handleCancelReservation}
+                  disabled={isCancellingReservation}
+                  className="px-4 py-2 border border-blue-300 text-blue-700 rounded-md hover:bg-white/60 transition disabled:opacity-60"
+                >
+                  {isCancellingReservation ? 'Releasing...' : 'Cancel Reservation'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {isReservationExpired && (
+          <div className="bg-orange-50 border border-orange-200 p-4 rounded-lg mb-6">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+              <div className="text-orange-900">
+                <h3 className="font-semibold">Reservation Expired</h3>
+                <p className="text-sm">The hold on your items has lapsed. Cancel to refresh the cart or start checkout again to re-reserve.</p>
+              </div>
+              <button
+                onClick={handleCancelReservation}
+                disabled={isCancellingReservation}
+                className="px-4 py-2 bg-orange-100 text-orange-800 rounded-md hover:bg-orange-200 transition disabled:opacity-60"
+              >
+                {isCancellingReservation ? 'Refreshing...' : 'Unlock Cart'}
+              </button>
             </div>
           </div>
         )}
@@ -438,18 +610,44 @@ export default function EnhancedCartPage() {
                 </div>
               </div>
 
+              {invoice && (
+                <div className="border-t border-gray-200 pt-4 mt-4 space-y-2 text-sm text-gray-600">
+                  <div className="flex justify-between">
+                    <span>Pro Forma Invoice</span>
+                    <span className="font-semibold text-gray-900">{invoice.invoiceNumber}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Issued</span>
+                    <span>{formatDateTime(invoice.issueDate)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Due</span>
+                    <span>{formatDateTime(invoice.dueDate)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Total Due</span>
+                    <span className="font-semibold text-gray-900">{formatCurrency(invoice.totals?.totalDue)}</span>
+                  </div>
+                  {invoice.reservation?.reservedUntil && (
+                    <p className="text-xs leading-relaxed text-gray-500">
+                      Reservation valid through {formatDateTime(invoice.reservation.reservedUntil)}.
+                    </p>
+                  )}
+                </div>
+              )}
+
               {/* Checkout Button */}
               <button
                 onClick={handleCheckout}
-                disabled={loading || isReserved}
+                disabled={loading || isStartingCheckout}
                 className={`w-full py-3 px-6 rounded-lg font-medium transition-all duration-200 
-                  ${loading || isReserved
+                  ${loading || isStartingCheckout
                     ? "bg-gray-300 text-gray-500 cursor-not-allowed"
                     : "bg-black text-white hover:bg-gray-800"
                   }
                 `}
               >
-                {loading ? 'Processing...' : isReserved ? 'Reserved for Checkout' : 'Proceed to Checkout'}
+                {checkoutButtonLabel()}
               </button>
 
               {/* Delivery Information */}
@@ -490,7 +688,10 @@ export default function EnhancedCartPage() {
                   setShowShippingModal(false);
                   handleCheckout();
                 }}
-                className="px-4 py-2 bg-black text-white rounded hover:bg-gray-900"
+                disabled={isStartingCheckout}
+                className={`px-4 py-2 rounded text-white ${
+                  isStartingCheckout ? 'bg-gray-400 cursor-not-allowed' : 'bg-black hover:bg-gray-900'
+                }`}
               >
                 Continue to Checkout
               </button>

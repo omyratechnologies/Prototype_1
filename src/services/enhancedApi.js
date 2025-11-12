@@ -1,5 +1,35 @@
 import api from './api.js';
 
+const extractMongoId = (value) => {
+  if (!value) return null;
+
+  if (typeof value === 'object') {
+    if (typeof value.toHexString === 'function') {
+      return value.toHexString();
+    }
+
+    const nestedKeys = ['_id', 'id', 'variantTypeId'];
+    for (const key of nestedKeys) {
+      if (value[key]) {
+        const extracted = extractMongoId(value[key]);
+        if (extracted) {
+          return extracted;
+        }
+      }
+    }
+  }
+
+  const stringValue = (typeof value === 'string' ? value : value?.toString?.())?.trim() || '';
+  if (!stringValue) return null;
+
+  if (/^[0-9a-fA-F]{24}$/.test(stringValue)) {
+    return stringValue;
+  }
+
+  const match = stringValue.match(/[0-9a-fA-F]{24}/);
+  return match ? match[0] : null;
+};
+
 // ==================== ENHANCED AUTHENTICATION SERVICES ====================
 export const authService = {
   // Login user with full profile data
@@ -195,8 +225,13 @@ export const cartService = {
 
   // Add item to cart with crate/piece quantities
   addToCart: async (variantTypeId, crateQty = 0, pieceQty = 0, metadata = {}) => {
+    const normalizedId = extractMongoId(variantTypeId);
+    if (!normalizedId) {
+      throw new Error('Unable to determine product identifier for cart item. Please refresh and try again.');
+    }
+
     const response = await api.post('/cart/add', {
-      variantTypeId,
+      variantTypeId: normalizedId,
       crateQty,
       pieceQty,
       metadata
@@ -206,8 +241,13 @@ export const cartService = {
 
   // Update cart item with new quantities
   updateCartItem: async (variantTypeId, crateQty, pieceQty) => {
+    const normalizedId = extractMongoId(variantTypeId);
+    if (!normalizedId) {
+      throw new Error('Unable to determine product identifier for cart item update.');
+    }
+
     const response = await api.put('/cart/update', {
-      variantTypeId,
+      variantTypeId: normalizedId,
       crateQty,
       pieceQty
     });
@@ -216,7 +256,12 @@ export const cartService = {
 
   // Remove item from cart
   removeFromCart: async (variantTypeId) => {
-    const response = await api.delete(`/cart/remove/${variantTypeId}`);
+    const normalizedId = extractMongoId(variantTypeId);
+    if (!normalizedId) {
+      throw new Error('Unable to determine product identifier for removal.');
+    }
+
+    const response = await api.delete(`/cart/remove/${normalizedId}`);
     return response.data;
   },
 
@@ -229,6 +274,24 @@ export const cartService = {
   // Reserve cart for checkout
   reserveForCheckout: async (timeoutMinutes = 5) => {
     const response = await api.post('/cart/reserve', { timeoutMinutes });
+    return response.data;
+  },
+
+  // Start checkout and reserve inventory window
+  startCheckout: async () => {
+    const response = await api.post('/cart/checkout');
+    return response.data;
+  },
+
+  // Complete checkout and generate invoice
+  completeCheckout: async (options = {}) => {
+    const response = await api.post('/cart/checkout/complete', options);
+    return response.data;
+  },
+
+  // Cancel checkout and release inventory
+  cancelCheckout: async () => {
+    const response = await api.post('/cart/checkout/cancel');
     return response.data;
   },
 

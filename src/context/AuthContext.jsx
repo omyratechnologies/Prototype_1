@@ -1,6 +1,9 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { authService } from '../services/index.js';
 
+const AUTH_TOKEN_KEY = 'auth_token';
+const AUTH_USER_KEY = 'auth_user';
+
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
@@ -15,12 +18,27 @@ export function AuthProvider({ children }) {
 
   const initializeAuth = async () => {
     try {
-      const token = localStorage.getItem('auth_token');
+      const token = localStorage.getItem(AUTH_TOKEN_KEY);
+      const storedUser = localStorage.getItem(AUTH_USER_KEY);
+
+      if (storedUser) {
+        try {
+          const parsedUser = JSON.parse(storedUser);
+          if (parsedUser?._id) {
+            setUser(parsedUser);
+          }
+        } catch (parseError) {
+          console.warn('Failed to parse stored auth user, clearing cache.');
+          localStorage.removeItem(AUTH_USER_KEY);
+        }
+      }
+
       if (token) {
         // Verify token is still valid by fetching user profile
         const response = await authService.getProfile();
         if (response.success) {
           setUser(response.data.user);
+          localStorage.setItem(AUTH_USER_KEY, JSON.stringify(response.data.user));
         } else {
           // Token is invalid, clear it
           clearAuthData();
@@ -28,15 +46,21 @@ export function AuthProvider({ children }) {
       }
     } catch (error) {
       console.error('Auth initialization error:', error);
-      clearAuthData();
+      if (error?.status === 401) {
+        clearAuthData();
+      } else {
+        // Keep existing session data so user isn't forced out on transient errors
+        setError(error?.message || 'Unable to verify session. Some data may be stale.');
+      }
     } finally {
       setLoading(false);
     }
   };
 
   const clearAuthData = () => {
-    localStorage.removeItem('auth_token');
+    localStorage.removeItem(AUTH_TOKEN_KEY);
     localStorage.removeItem('loggedInUser'); // Remove old localStorage data
+    localStorage.removeItem(AUTH_USER_KEY);
     setUser(null);
     setError(null);
   };
@@ -52,7 +76,8 @@ export function AuthProvider({ children }) {
         const { token, user: userData } = response.data;
         
         // Store token
-        localStorage.setItem('auth_token', token);
+  localStorage.setItem(AUTH_TOKEN_KEY, token);
+  localStorage.setItem(AUTH_USER_KEY, JSON.stringify(userData));
         setUser(userData);
         
         return { success: true, user: userData };
@@ -79,7 +104,8 @@ export function AuthProvider({ children }) {
         const { token, user: newUser } = response.data;
         
         // Store token
-        localStorage.setItem('auth_token', token);
+  localStorage.setItem(AUTH_TOKEN_KEY, token);
+  localStorage.setItem(AUTH_USER_KEY, JSON.stringify(newUser));
         setUser(newUser);
         
         return { success: true, user: newUser };
@@ -117,7 +143,8 @@ export function AuthProvider({ children }) {
       const response = await authService.updateProfile(updates);
       
       if (response.success) {
-        setUser(response.data.user);
+  setUser(response.data.user);
+  localStorage.setItem(AUTH_USER_KEY, JSON.stringify(response.data.user));
         return { success: true, user: response.data.user };
       } else {
         throw new Error(response.message || 'Profile update failed');
